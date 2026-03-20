@@ -1,0 +1,24 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "oreno-mindmap",
+  "outputfilename": "oreno-mindmap",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "medapani",
+    "email": "medapani"
+  },
+  "info": {
+    "fileAssociations": [
+      {
+        "ext": "orenomm",
+        "name": "Oreno MindMap Data",
+        "description": "Oreno MindMap specific data file",
+        "iconName": "appicon",
+        "role": "Editor"
+      }
+    ]
+  }
+}
