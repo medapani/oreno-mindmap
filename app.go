@@ -179,12 +179,14 @@ type ImportResult struct {
 	Sheets   []*mindmap.Sheet `json:"sheets"`
 }
 
-// ImportFile はファイルダイアログを開き、選択されたファイルのシート一覧を返す
+// ImportFile はファイルダイアログを開き、選択されたファイルのシート一覧を返す。
+// gzip マジックバイト (0x1f 0x8b) で始まる場合は .orenomm 形式として読み込み、
+// それ以外は Markdown ファイルとして解析する。
 func (a *App) ImportFile() (*ImportResult, error) {
 	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
 		Title: "インポートするファイルを選択",
 		Filters: []wailsRuntime.FileFilter{
-			{DisplayName: "MindMap (*.orenomm)", Pattern: "*.orenomm"},
+			{DisplayName: "MindMap / Markdown (*.orenomm, *.md)", Pattern: "*.orenomm;*.md"},
 		},
 	})
 	if err != nil {
@@ -193,15 +195,32 @@ func (a *App) ImportFile() (*ImportResult, error) {
 	if path == "" {
 		return nil, nil // キャンセル
 	}
-	mm, err := mindmap.Load(path)
+
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ファイル読み込み失敗: %w", err)
 	}
+
 	base := filepath.Base(path)
 	ext := filepath.Ext(base)
 	fileName := base[:len(base)-len(ext)]
+
+	// gzip マジックバイトで orenomm 形式か判定
+	if len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b {
+		mm, err := mindmap.Load(path)
+		if err != nil {
+			return nil, err
+		}
+		return &ImportResult{
+			FileName: fileName,
+			Sheets:   mm.Sheets,
+		}, nil
+	}
+
+	// Markdown として解析
+	sheet := mindmap.ImportMarkdown(string(data), fileName)
 	return &ImportResult{
 		FileName: fileName,
-		Sheets:   mm.Sheets,
+		Sheets:   []*mindmap.Sheet{sheet},
 	}, nil
 }

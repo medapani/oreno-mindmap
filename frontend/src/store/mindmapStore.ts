@@ -90,6 +90,7 @@ interface MindMapStore {
   addChildNodeLeft: (parentId: string) => void;
   addSiblingNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
+  deleteSelectedNodes: () => void;
   toggleCollapse: (nodeId: string) => void;
   setSelectedNodeId: (id: string | null) => void;
   setContextMenu: (menu: { x: number; y: number; nodeId: string } | null) => void;
@@ -151,6 +152,20 @@ function findNodeInTree(tree: MindMapNode, id: string): MindMapNode | null {
 }
 function findTreeIndex(trees: MindMapNode[], id: string): number {
   return trees.findIndex(t => !!findNodeInTree(t, id));
+}
+
+function collectTreeNodeIds(roots: MindMapNode[]): string[] {
+  const ids: string[] = [];
+  const walk = (node: MindMapNode) => {
+    ids.push(node.id);
+    for (const child of node.children ?? []) {
+      walk(child);
+    }
+  };
+  for (const root of roots) {
+    walk(root);
+  }
+  return ids;
 }
 
 export const useMindMapStore = create<MindMapStore>((set, get) => ({
@@ -515,6 +530,43 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
       nodes: nodes.filter(n => !toDelete.has(n.id)),
       edges: edges.filter(e => !toDelete.has(e.source) && !toDelete.has(e.target)),
       trees: newTrees,
+      isDirty: true,
+      selectedNodeId: null,
+    });
+  },
+
+  deleteSelectedNodes: () => {
+    const { nodes, edges, trees } = get();
+    const selectedIds = nodes.filter(n => n.selected).map(n => n.id);
+    if (selectedIds.length === 0) return;
+    get().pushHistory();
+
+    const toDeleteMulti = new Set<string>();
+    function collectSelected(node: MindMapNode) {
+      toDeleteMulti.add(node.id);
+      for (const child of node.children ?? []) collectSelected(child);
+    }
+    for (const selId of selectedIds) {
+      for (const tree of trees) {
+        const target = findNodeInTree(tree, selId);
+        if (target) { collectSelected(target); break; }
+      }
+    }
+
+    function removeFromTreeMulti(node: MindMapNode): MindMapNode {
+      return {
+        ...node,
+        children: (node.children ?? [])
+          .filter(c => !toDeleteMulti.has(c.id))
+          .map(removeFromTreeMulti),
+      };
+    }
+    const newTreesMulti = trees.filter(t => !toDeleteMulti.has(t.id)).map(removeFromTreeMulti);
+
+    set({
+      nodes: nodes.filter(n => !toDeleteMulti.has(n.id)),
+      edges: edges.filter(e => !toDeleteMulti.has(e.source) && !toDeleteMulti.has(e.target)),
+      trees: newTreesMulti,
       isDirty: true,
       selectedNodeId: null,
     });
@@ -1112,15 +1164,20 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
       children: (node.children ?? []).map(cloneTree),
     });
 
-    const newSheets: Sheet[] = result.sheets.map(srcSheet => ({
-      id: `sheet-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      name: `${result.file_name}_${srcSheet.name}`,
-      roots: srcSheet.roots.map(cloneTree),
-    }));
+    const newSheets: Sheet[] = result.sheets.map(srcSheet => {
+      const clonedRoots = srcSheet.roots.map(cloneTree);
+      const laidRoots = computeMultiLayoutWithSpacing(clonedRoots);
+      return {
+        id: `sheet-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: `${result.file_name}_${srcSheet.name}`,
+        roots: laidRoots,
+      };
+    });
 
     const allSheets = [...updatedSheets, ...newSheets];
     const firstNewSheet = newSheets[0];
     const { nodes: newNodes, edges: newEdges } = mergeTreesToFlow(firstNewSheet.roots);
+    const importedNodeIds = collectTreeNodeIds(firstNewSheet.roots);
     set({
       sheets: allSheets,
       activeSheetId: firstNewSheet.id,
@@ -1131,7 +1188,7 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
       contextMenu: null,
       history: [{ nodes: newNodes, edges: newEdges, trees: firstNewSheet.roots }],
       historyIndex: 0,
-      pendingLayoutIds: new Set(),
+      pendingLayoutIds: new Set(importedNodeIds),
       isDirty: true,
       fitViewTrigger: get().fitViewTrigger + 1,
     });

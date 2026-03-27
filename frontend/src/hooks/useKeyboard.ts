@@ -54,10 +54,19 @@ export function useKeyboard() {
         }
 
         // Delete/Backspace: ノード削除
-        if ((e.key === 'Delete' || e.key === 'Backspace') && store.selectedNodeId) {
-          e.preventDefault();
-          store.deleteNode(store.selectedNodeId);
-          return;
+        // Delete/Backspace: ノード削除（複数選択対応）
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          const selectedCount = store.nodes.filter(n => n.selected).length;
+          if (selectedCount > 1) {
+            e.preventDefault();
+            store.deleteSelectedNodes();
+            return;
+          }
+          if (store.selectedNodeId) {
+            e.preventDefault();
+            store.deleteNode(store.selectedNodeId);
+            return;
+          }
         }
 
         // Alt+↑: 兄弟内で上に移動 / Alt+↓: 下に移動
