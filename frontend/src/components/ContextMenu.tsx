@@ -61,6 +61,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, nodeId, onClose 
   const clipboard = store.clipboard;
   const canPaste = !!clipboard;
 
+  const selectedNodeIds = store.selectedNodeIds;
+  const isMultiSelected = selectedNodeIds.length > 1 && selectedNodeIds.includes(nodeId);
+
   return (
     <div
       ref={menuRef}
@@ -125,6 +128,14 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, nodeId, onClose 
       {hasImage && <MenuItem icon="🗑" label="画像を削除" onClick={handleRemoveImage} />}
 
       <div className="h-px bg-slate-100 my-1" />
+      {isMultiSelected && (
+        <MenuItem
+          icon="🗑"
+          label={`${selectedNodeIds.length}個のノードを削除`}
+          onClick={() => handle(() => store.deleteSelectedNodes())}
+          danger
+        />
+      )}
       <MenuItem
         icon="🗑"
         label={isRoot ? 'ツリーを削除' : '削除'}

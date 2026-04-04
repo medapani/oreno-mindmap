@@ -8,11 +8,13 @@ import {
   BackgroundVariant,
   Node as RFNode,
   useReactFlow,
+  OnSelectionChangeParams,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useMindMapStore } from '../store/mindmapStore';
 import { MindMapNode } from './MindMapNode';
 import { ContextMenu } from './ContextMenu';
+import { ColorPicker } from './ColorPicker';
 
 const nodeTypes: NodeTypes = {
   mindmapNode: MindMapNode,
@@ -41,9 +43,20 @@ export const MindMapCanvas: React.FC = () => {
     pasteNode,
     focusNodeId,
     focusNodeTrigger,
+    selectedNodeIds,
+    setSelectedNodeIds,
+    updateSelectedNodesColor,
+    reparentMultipleNodes,
   } = useMindMapStore();
 
   const { fitView, getIntersectingNodes, screenToFlowPosition, setCenter, getNode } = useReactFlow();
+
+  // screenToFlowPosition は viewport 変化のたびに変わるので ref 経由でネイティブリスナーに渡す
+  const screenToFlowPositionRef = useRef(screenToFlowPosition);
+  useEffect(() => { screenToFlowPositionRef.current = screenToFlowPosition; }, [screenToFlowPosition]);
+
+  // コンテナ ref（ネイティブ contextmenu リスナー用）
+  const flowContainerRef = useRef<HTMLDivElement>(null);
 
   const onMouseMoveOnPane = useCallback((e: React.MouseEvent) => {
     setMouseFlowPosition(screenToFlowPosition({ x: e.clientX, y: e.clientY }));
@@ -53,7 +66,39 @@ export const MindMapCanvas: React.FC = () => {
   const draggingNodeIdRef = useRef<string | null>(null);
 
   // ルートへの付け替え時に左右選択ダイアログ用
-  const [pendingReparent, setPendingReparent] = useState<{ nodeId: string; newParentId: string } | null>(null);
+  const [pendingReparent, setPendingReparent] = useState<{ nodeIds: string[]; newParentId: string } | null>(null);
+
+  // 複数選択時のカラーピッカー表示
+  const [showMultiColorPicker, setShowMultiColorPicker] = useState(false);
+
+  // Space キー保持中はパンモード
+  const [isPanMode, setIsPanMode] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== ' ' || e.repeat) return;
+      const target = e.target as HTMLElement;
+      if (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+      e.preventDefault();
+      setIsPanMode(true);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === ' ') setIsPanMode(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  const onSelectionChange = useCallback(({ nodes: selectedNodes }: OnSelectionChangeParams) => {
+    setSelectedNodeIds(selectedNodes.map(n => n.id));
+    if (selectedNodes.length !== selectedNodeIds.length) {
+      setShowMultiColorPicker(false);
+    }
+  }, [setSelectedNodeIds, selectedNodeIds.length]);
 
   // ペイン右クリックメニュー
   const [paneMenu, setPaneMenu] = useState<{ x: number; y: number; flowPosition: { x: number; y: number } } | null>(null);
@@ -96,30 +141,47 @@ export const MindMapCanvas: React.FC = () => {
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
+    setSelectedNodeIds([]);
     setContextMenu(null);
     setPaneMenu(null);
-  }, [setSelectedNodeId, setContextMenu]);
+    setShowMultiColorPicker(false);
+  }, [setSelectedNodeId, setSelectedNodeIds, setContextMenu]);
 
-  const onNodeContextMenu = useCallback(
-    (e: React.MouseEvent, node: RFNode) => {
+  // ネイティブ contextmenu リスナー：Shift+右クリック時も確実に発火させるため
+  useEffect(() => {
+    const container = flowContainerRef.current;
+    if (!container) return;
+    const handler = (e: MouseEvent) => {
       e.preventDefault();
-      setSelectedNodeId(node.id);
-      setContextMenu({ x: e.clientX, y: e.clientY, nodeId: node.id });
-    },
-    [setSelectedNodeId, setContextMenu]
-  );
-
-  const onPaneContextMenu = useCallback(
-    (e: React.MouseEvent | MouseEvent) => {
-      e.preventDefault();
+      e.stopPropagation();
+      const nodeEl = (e.target as Element).closest('.react-flow__node');
+      if (nodeEl) {
+        const nodeId = nodeEl.getAttribute('data-id');
+        if (nodeId) {
+          setSelectedNodeId(nodeId);
+          setContextMenu({ x: e.clientX, y: e.clientY, nodeId });
+          setPaneMenu(null);
+          return;
+        }
+      }
+      // ドラッグ選択時は .react-flow__nodesselection オーバーレイが右クリックを受け取る
+      // その場合は selectedNodeIds の先頭ノードをコンテキストメニューの対象にする
+      const selectionEl = (e.target as Element).closest('.react-flow__nodesselection');
+      if (selectionEl) {
+        const { selectedNodeIds: selIds } = useMindMapStore.getState();
+        if (selIds.length > 0) {
+          setContextMenu({ x: e.clientX, y: e.clientY, nodeId: selIds[0] });
+          setPaneMenu(null);
+          return;
+        }
+      }
       setContextMenu(null);
-      const clientX = (e as MouseEvent).clientX;
-      const clientY = (e as MouseEvent).clientY;
-      const flowPosition = screenToFlowPosition({ x: clientX, y: clientY });
-      setPaneMenu({ x: clientX, y: clientY, flowPosition });
-    },
-    [setContextMenu, screenToFlowPosition]
-  );
+      const flowPos = screenToFlowPositionRef.current({ x: e.clientX, y: e.clientY });
+      setPaneMenu({ x: e.clientX, y: e.clientY, flowPosition: flowPos });
+    };
+    container.addEventListener('contextmenu', handler);
+    return () => container.removeEventListener('contextmenu', handler);
+  }, [setSelectedNodeId, setContextMenu]);
 
   // ドラッグ開始時: ノードIDを記録
   const onNodeDragStart = useCallback((_: React.MouseEvent, node: RFNode) => {
@@ -127,9 +189,10 @@ export const MindMapCanvas: React.FC = () => {
   }, []);
 
   // ドラッグ中: ルートノード以外はドロップターゲットを検出してハイライト
-  const onNodeDrag = useCallback((_: React.MouseEvent, node: RFNode) => {
+  const onNodeDrag = useCallback((_: React.MouseEvent, node: RFNode, dragNodes: RFNode[]) => {
     if (trees.length === 0) return;
-    // ルートノードをドラッグ中は付け替え不要
+    // 複数ドラッグ中もドロップターゲット検出は主ノード基準で行う
+    // 主ノードがルートなら付け替え不要
     if (trees.some(t => t.id === node.id)) return;
 
     // 自分自身の子孫IDセットを収集（循環防止）
@@ -150,20 +213,32 @@ export const MindMapCanvas: React.FC = () => {
   }, [trees, nodes, edges, getIntersectingNodes, setDropTargetId]);
 
   // ドロップ時: 付け替えまたは兄弟並び替えを実行（ルートノードのドラッグ時は付け替えしない）
-  const onNodeDragStop = useCallback((_: React.MouseEvent, node: RFNode) => {
+  const onNodeDragStop = useCallback((_: React.MouseEvent, node: RFNode, dragNodes: RFNode[]) => {
     const { dropTargetId } = useMindMapStore.getState();
     const draggingId = draggingNodeIdRef.current;
     const isDraggingRoot = draggingId ? trees.some(t => t.id === draggingId) : false;
+    const isMultiDrag = dragNodes.length > 1;
 
     if (!isDraggingRoot && dropTargetId && draggingId && draggingId !== dropTargetId) {
-      if (trees.some(t => t.id === dropTargetId)) {
+      if (isMultiDrag) {
+        // 複数ノード付け替え: 選択中の全非ルートノードを移動先にまとめて付け替え
+        const { selectedNodeIds: selIds } = useMindMapStore.getState();
+        const idsToMove = selIds.length > 0 ? selIds : [draggingId];
+        if (trees.some(t => t.id === dropTargetId)) {
+          // ルートへの付け替え: 左右選択ダイアログを表示
+          setPendingReparent({ nodeIds: idsToMove, newParentId: dropTargetId });
+          setDropTargetId(null);
+        } else {
+          reparentMultipleNodes(idsToMove, dropTargetId);
+        }
+      } else if (trees.some(t => t.id === dropTargetId)) {
         // ルートへの付け替え: 左右選択ダイアログを表示
-        setPendingReparent({ nodeId: draggingId, newParentId: dropTargetId });
+        setPendingReparent({ nodeIds: [draggingId], newParentId: dropTargetId });
         setDropTargetId(null);
       } else {
         reparentNode(draggingId, dropTargetId);
       }
-    } else if (draggingId && !isDraggingRoot) {
+    } else if (draggingId && !isDraggingRoot && !isMultiDrag) {
       // 付け替えなし & ルートでない → 兄弟間並び替えチェック
       setDropTargetId(null);
 
@@ -199,10 +274,10 @@ export const MindMapCanvas: React.FC = () => {
     }
 
     draggingNodeIdRef.current = null;
-  }, [reparentNode, setDropTargetId, trees]);
+  }, [reparentNode, reparentMultipleNodes, setDropTargetId, trees]);
 
   return (
-    <div className="flex-1 relative bg-slate-50">
+    <div ref={flowContainerRef} className={`flex-1 relative bg-slate-50${isPanMode ? ' cursor-grab' : ''}`}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -211,12 +286,13 @@ export const MindMapCanvas: React.FC = () => {
         nodeTypes={nodeTypes}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
-        onNodeContextMenu={onNodeContextMenu}
-        onPaneContextMenu={onPaneContextMenu}
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         onMouseMove={onMouseMoveOnPane}
+        onSelectionChange={onSelectionChange}
+        panOnDrag={isPanMode}
+        selectionOnDrag={!isPanMode}
         fitView
         fitViewOptions={{ padding: 0.2, maxZoom: INITIAL_ZOOM }}
         minZoom={0.1}
@@ -236,6 +312,35 @@ export const MindMapCanvas: React.FC = () => {
           maskColor="rgba(248, 250, 252, 0.7)"
         />
       </ReactFlow>
+
+      {/* 複数選択時の浮動カラー変更ツールバー */}
+      {selectedNodeIds.length > 1 && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-white rounded-xl shadow-xl border border-slate-200 px-4 py-2">
+          <span className="text-xs text-slate-500 font-medium">{selectedNodeIds.length}個のノードを選択中</span>
+          <div className="w-px h-5 bg-slate-200" />
+          <div className="relative">
+            <button
+              onClick={() => setShowMultiColorPicker(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <span>🎨</span>
+              <span>色を変更</span>
+            </button>
+            {showMultiColorPicker && (
+              <div className="absolute top-full left-0 mt-1">
+                <ColorPicker
+                  currentColor=""
+                  onSelect={(color) => {
+                    updateSelectedNodesColor(color);
+                    setShowMultiColorPicker(false);
+                  }}
+                  onClose={() => setShowMultiColorPicker(false)}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ペイン右クリックメニュー */}
       {paneMenu && (
@@ -280,7 +385,7 @@ export const MindMapCanvas: React.FC = () => {
               <button
                 className="flex items-center gap-2 px-5 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 active:bg-blue-700 font-medium transition-colors"
                 onClick={() => {
-                  reparentNode(pendingReparent.nodeId, pendingReparent.newParentId, 'left');
+                  reparentMultipleNodes(pendingReparent.nodeIds, pendingReparent.newParentId, 'left');
                   setPendingReparent(null);
                 }}
               >
@@ -289,7 +394,7 @@ export const MindMapCanvas: React.FC = () => {
               <button
                 className="flex items-center gap-2 px-5 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 active:bg-blue-700 font-medium transition-colors"
                 onClick={() => {
-                  reparentNode(pendingReparent.nodeId, pendingReparent.newParentId, 'right');
+                  reparentMultipleNodes(pendingReparent.nodeIds, pendingReparent.newParentId, 'right');
                   setPendingReparent(null);
                 }}
               >

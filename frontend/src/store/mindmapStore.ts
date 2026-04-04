@@ -39,6 +39,9 @@ interface MindMapStore {
   // 選択中ノード
   selectedNodeId: string | null;
 
+  // 複数選択中ノードID一覧
+  selectedNodeIds: string[];
+
   // Undo/Redo
   history: HistoryEntry[];
   historyIndex: number;
@@ -93,10 +96,13 @@ interface MindMapStore {
   deleteSelectedNodes: () => void;
   toggleCollapse: (nodeId: string) => void;
   setSelectedNodeId: (id: string | null) => void;
+  setSelectedNodeIds: (ids: string[]) => void;
+  updateSelectedNodesColor: (color: string) => void;
   setContextMenu: (menu: { x: number; y: number; nodeId: string } | null) => void;
   setDropTargetId: (id: string | null) => void;
   setMouseFlowPosition: (pos: { x: number; y: number } | null) => void;
   reparentNode: (nodeId: string, newParentId: string, direction?: 'right' | 'left') => void;
+  reparentMultipleNodes: (nodeIds: string[], newParentId: string, direction?: 'right' | 'left') => void;
   moveNodeUp: (nodeId: string) => void;
   moveNodeDown: (nodeId: string) => void;
   reorderNodeAmongSiblings: (nodeId: string, insertBeforeSiblingId: string | null) => void;
@@ -126,6 +132,9 @@ interface MindMapStore {
   duplicateSheet: (id: string) => void;
   deleteSheet: (id: string) => void;
   renameSheet: (id: string, name: string) => void;
+  moveSheetLeft: (id: string) => void;
+  moveSheetRight: (id: string) => void;
+  reorderSheet: (fromId: string, insertBeforeId: string | null) => void;
 }
 
 // ─── 内部ヘルパー ────────────────────────────────────────────
@@ -178,6 +187,7 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
   isDirty: false,
   mindmapMeta: null,
   selectedNodeId: null,
+  selectedNodeIds: [],
   history: [],
   historyIndex: -1,
   fitViewTrigger: 0,
@@ -195,6 +205,21 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
   focusNodeTrigger: 0,
 
   setEditingNodeId: (id: string | null) => set({ editingNodeId: id }),
+
+  setSelectedNodeIds: (ids: string[]) => set({ selectedNodeIds: ids }),
+
+  updateSelectedNodesColor: (color: string) => {
+    const { selectedNodeIds } = get();
+    if (selectedNodeIds.length === 0) return;
+    get().pushHistory();
+    set(state => ({
+      nodes: state.nodes.map(n =>
+        selectedNodeIds.includes(n.id) ? { ...n, data: { ...n.data, color } } : n
+      ),
+      isDirty: true,
+    }));
+    get()._syncTree();
+  },
 
   setSearchQuery: (query: string) => {
     const { nodes } = get();
@@ -787,6 +812,99 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
     set({ trees: laidTrees, nodes: newNodes, edges: newEdges, isDirty: true, dropTargetId: null });
   },
 
+  reparentMultipleNodes: (nodeIds: string[], newParentId: string, direction?: 'right' | 'left') => {
+    const { trees, nodes, edges } = get();
+    if (nodeIds.length === 0) return;
+    const rootIds = new Set(trees.map(t => t.id));
+
+    // ルートと移動先自身を除外
+    const candidates = nodeIds.filter(id => id !== newParentId && !rootIds.has(id));
+    if (candidates.length === 0) return;
+
+    // 他のcandidateの子孫であるノードは除外（祖先ごと移動するため）
+    function getDescendantIds(nodeId: string): Set<string> {
+      const result = new Set<string>();
+      function collect(id: string) {
+        edges.filter(e => e.source === id).forEach(e => { result.add(e.target); collect(e.target); });
+      }
+      collect(nodeId);
+      return result;
+    }
+
+    const toReparent = candidates.filter(id => {
+      for (const other of candidates) {
+        if (other === id) continue;
+        if (getDescendantIds(other).has(id)) return false;
+      }
+      return true;
+    });
+
+    if (toReparent.length === 0) return;
+
+    // 循環防止: 移動先がいずれかの移動ノードの子孫であれば中止
+    for (const id of toReparent) {
+      const desc = getDescendantIds(id);
+      desc.add(id);
+      if (desc.has(newParentId)) return;
+    }
+
+    if (findTreeIndex(trees, newParentId) === -1) return;
+
+    get().pushHistory();
+
+    const newParentRF = nodes.find(n => n.id === newParentId);
+    const newParentIsRoot = rootIds.has(newParentId);
+    const newParentDir = (newParentRF?.data as { direction?: 'right' | 'left' }).direction ?? 'right';
+
+    function updateDirection(node: MindMapNode, dir: 'right' | 'left'): MindMapNode {
+      return { ...node, direction: dir, children: (node.children ?? []).map(c => updateDirection(c, dir)) };
+    }
+
+    function detachNode(treeNode: MindMapNode, targetId: string): { tree: MindMapNode; detached: MindMapNode | null } {
+      let detached: MindMapNode | null = null;
+      function walk(node: MindMapNode): MindMapNode {
+        const newChildren = (node.children ?? []).filter(c => {
+          if (c.id === targetId) { detached = c; return false; }
+          return true;
+        }).map(walk);
+        return { ...node, children: newChildren };
+      }
+      return { tree: walk(treeNode), detached };
+    }
+
+    function attachToParent(node: MindMapNode, parentId: string, child: MindMapNode): MindMapNode {
+      if (node.id === parentId) return { ...node, children: [...(node.children ?? []), child] };
+      return { ...node, children: (node.children ?? []).map(c => attachToParent(c, parentId, child)) };
+    }
+
+    let currentTrees = trees.map(t => flowToTree(nodes, edges, t));
+
+    for (const nodeId of toReparent) {
+      const srcIdx = findTreeIndex(currentTrees, nodeId);
+      if (srcIdx === -1) continue;
+
+      const { tree: newSrc, detached } = detachNode(currentTrees[srcIdx], nodeId);
+      if (!detached) continue;
+
+      const dir = newParentIsRoot
+        ? (direction ?? (detached as MindMapNode).direction ?? 'right')
+        : newParentDir;
+      const movedNode = updateDirection(detached as MindMapNode, dir);
+
+      currentTrees = [...currentTrees];
+      currentTrees[srcIdx] = newSrc;
+
+      const tgtIdx = findTreeIndex(currentTrees, newParentId);
+      if (tgtIdx === -1) continue;
+      currentTrees[tgtIdx] = attachToParent(currentTrees[tgtIdx], newParentId, movedNode);
+    }
+
+    const { heights: mhM, widths: mwM } = buildNodeSizes(nodes);
+    const laidTrees = computeMultiLayout(currentTrees, mhM, mwM);
+    const { nodes: newNodes, edges: newEdges } = mergeTreesToFlow(laidTrees);
+    set({ trees: laidTrees, nodes: newNodes, edges: newEdges, isDirty: true, dropTargetId: null });
+  },
+
   undo: () => {
     const { history, historyIndex, nodes: curNodes, edges: curEdges, trees: curTrees } = get();
     if (historyIndex <= 0) return;
@@ -1143,6 +1261,64 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
     const { sheets } = get();
     const newSheets = sheets.map(s => s.id === id ? { ...s, name } : s);
     set({ sheets: newSheets, isDirty: true });
+  },
+
+  moveSheetLeft: (id: string) => {
+    const { nodes, edges, trees, sheets, activeSheetId } = get();
+    const idx = sheets.findIndex(s => s.id === id);
+    if (idx <= 0) return;
+
+    // 現在のアクティブシートの編集内容を先に反映
+    const syncedRoots = trees.map(tree => flowToTree(nodes, edges, tree));
+    const syncedSheets = sheets.map(s =>
+      s.id === activeSheetId ? { ...s, roots: syncedRoots } : s
+    );
+
+    const reordered = [...syncedSheets];
+    [reordered[idx - 1], reordered[idx]] = [reordered[idx], reordered[idx - 1]];
+    set({ sheets: reordered, isDirty: true });
+  },
+
+  moveSheetRight: (id: string) => {
+    const { nodes, edges, trees, sheets, activeSheetId } = get();
+    const idx = sheets.findIndex(s => s.id === id);
+    if (idx === -1 || idx >= sheets.length - 1) return;
+
+    // 現在のアクティブシートの編集内容を先に反映
+    const syncedRoots = trees.map(tree => flowToTree(nodes, edges, tree));
+    const syncedSheets = sheets.map(s =>
+      s.id === activeSheetId ? { ...s, roots: syncedRoots } : s
+    );
+
+    const reordered = [...syncedSheets];
+    [reordered[idx], reordered[idx + 1]] = [reordered[idx + 1], reordered[idx]];
+    set({ sheets: reordered, isDirty: true });
+  },
+
+  reorderSheet: (fromId: string, insertBeforeId: string | null) => {
+    const { nodes, edges, trees, sheets, activeSheetId } = get();
+    const fromIdx = sheets.findIndex(s => s.id === fromId);
+    if (fromIdx === -1) return;
+    if (insertBeforeId === fromId) return;
+
+    // 現在のアクティブシートの編集内容を先に反映
+    const syncedRoots = trees.map(tree => flowToTree(nodes, edges, tree));
+    const syncedSheets = sheets.map(s =>
+      s.id === activeSheetId ? { ...s, roots: syncedRoots } : s
+    );
+
+    const moving = syncedSheets[fromIdx];
+    const without = syncedSheets.filter(s => s.id !== fromId);
+    const insertIdx = insertBeforeId === null
+      ? without.length
+      : without.findIndex(s => s.id === insertBeforeId);
+    const finalIdx = insertIdx === -1 ? without.length : insertIdx;
+    const reordered = [
+      ...without.slice(0, finalIdx),
+      moving,
+      ...without.slice(finalIdx),
+    ];
+    set({ sheets: reordered, isDirty: true });
   },
 
   importSheets: async () => {

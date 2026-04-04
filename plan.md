@@ -118,13 +118,16 @@ type MindMap struct {
 | キー | アクション |
 |---|---|
 | Tab | 選択ノードに子ノード追加 |
+| Shift+Tab | ルートノードの場合は左側に子ノード追加 |
 | Enter | 選択ノードに兄弟ノード追加 |
-| Delete / Backspace | 選択ノードを削除（子も再帰削除） |
+| Delete / Backspace | 選択ノードを削除（複数選択時は一括削除） |
+| Alt+↑ / Alt+↓ | 兄弟内で順序を上下に移動 |
 | Ctrl+Z / Cmd+Z | Undo |
 | Ctrl+Y / Cmd+Shift+Z | Redo |
 | Ctrl+S / Cmd+S | 上書き保存 |
-| Ctrl+V / Cmd+V | クリップボード画像の貼り付け |
-| F2 | 選択ノードの編集 |
+| Ctrl+C / Cmd+C | 選択ノードをコピー |
+| Ctrl+V / Cmd+V | クリップボード画像 or ノードの貼り付け |
+| Space（長押し） | キャンバスパンモード（離すと選択モードに戻る） |
 
 ### 将来のWeb化対応
 - Wailsバインディング呼び出しを `api/wailsClient.ts` に完全集約
@@ -278,6 +281,7 @@ root:
 | `frontend/src/components/Toolbar.tsx` | ✅ | 上部ツールバー |
 | `frontend/src/components/ColorPicker.tsx` | ✅ | 10色カラーパレット |
 | `frontend/src/components/ContextMenu.tsx` | ✅ | 右クリックメニュー |
+| `frontend/src/components/SheetTabs.tsx` | ✅ | シートタブUI（追加・削除・リネーム・複製・順序変更） |
 
 ### 未実装 ❌
 
@@ -301,3 +305,19 @@ root:
 - `create_file` ツールでGoファイルを作ると内容が破損することがある → `/tmp/write_go_files.py` などPythonスクリプトで書き直す
 - `wails dev` 起動時に `address already in use 34115` が出たら前プロセスを kill する
 - `wailsjs/` ディレクトリ（Goバインディング自動生成）は `wails dev` 初回実行時に生成される
+
+### 2026-04-04
+- シートの順番を入れ替える機能を追加
+  - `store/mindmapStore.ts` に `moveSheetLeft(id)` / `moveSheetRight(id)` を追加
+  - `SheetTabs.tsx` の右クリックメニューに「◀️ 左へ移動」「▶️ 右へ移動」を追加
+  - 先頭シートでは左移動、末尾シートでは右移動を非表示にする制御を実装
+- デフォルトをノード選択モードに変更、Space長押しでキャンバスパンモードに切り替え
+  - `MindMapCanvas.tsx` に `isPanMode` state と Space キーの keydown/keyup ハンドラーを追加
+  - `selectionOnDrag={!isPanMode}` / `panOnDrag={isPanMode}` をReactFlowに適用
+  - パンモード中はカーソルが `cursor-grab` に変化
+- 複数ノードの一括reparent機能を追加
+  - `store/mindmapStore.ts` に `reparentMultipleNodes(nodeIds, newParentId, direction?)` を追加
+  - Cmd+クリック（Mac）/ Ctrl+クリック（Windows）or ドラッグ選択で複数ノードを選択し、別ノードの上にドラッグするとまとめて子として移動
+  - 選択ノードのうち他の選択ノードの子孫にあたるものは重複移動を防ぐため除外（祖先のみ移動）
+  - ルートへのドロップ時は左右選択ダイアログを表示し全選択ノードを指定方向に移動
+  - 1回の操作でUndoできるようにまとめてpushHistory
