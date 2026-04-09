@@ -14,10 +14,16 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, nodeId, onClose 
   const store = useMindMapStore();
   const menuRef = useRef<HTMLDivElement>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const selectedNodeIds = store.selectedNodeIds;
+  const isMultiSelected = selectedNodeIds.length > 1 && selectedNodeIds.includes(nodeId);
+  const targetNodeIds = isMultiSelected ? selectedNodeIds : [nodeId];
   const selectedNode = store.nodes.find(n => n.id === nodeId);
   const currentColor = (selectedNode?.data as { color: string })?.color ?? '#94A3B8';
-  const currentTextAlign = (selectedNode?.data as { textAlign?: 'left' | 'center' | 'right' })?.textAlign ?? 'center';
   const isRoot = (selectedNode?.data as { isRoot?: boolean })?.isRoot;
+  const hasUniformTextAlign = (textAlign: 'left' | 'center' | 'right') => targetNodeIds.every(id => {
+    const node = store.nodes.find(n => n.id === id);
+    return ((node?.data as { textAlign?: 'left' | 'center' | 'right' })?.textAlign ?? 'center') === textAlign;
+  });
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -61,9 +67,13 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, nodeId, onClose 
 
   const clipboard = store.clipboard;
   const canPaste = !!clipboard;
-
-  const selectedNodeIds = store.selectedNodeIds;
-  const isMultiSelected = selectedNodeIds.length > 1 && selectedNodeIds.includes(nodeId);
+  const applyTextAlign = (textAlign: 'left' | 'center' | 'right') => {
+    if (isMultiSelected) {
+      store.updateSelectedNodesTextAlign(textAlign);
+      return;
+    }
+    store.updateNodeTextAlign(nodeId, textAlign);
+  };
 
   return (
     <div
@@ -127,19 +137,19 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, nodeId, onClose 
       {/* 画像操作 */}
       <div className="h-px bg-slate-100 my-1" />
       <MenuItem
-        icon={currentTextAlign === 'left' ? '◉' : '○'}
-        label="テキストを左寄せ"
-        onClick={() => handle(() => store.updateNodeTextAlign(nodeId, 'left'))}
+        icon={hasUniformTextAlign('left') ? '◉' : '○'}
+        label={isMultiSelected ? `テキストを左寄せ (${selectedNodeIds.length}個)` : 'テキストを左寄せ'}
+        onClick={() => handle(() => applyTextAlign('left'))}
       />
       <MenuItem
-        icon={currentTextAlign === 'center' ? '◉' : '○'}
-        label="テキストを中央寄せ"
-        onClick={() => handle(() => store.updateNodeTextAlign(nodeId, 'center'))}
+        icon={hasUniformTextAlign('center') ? '◉' : '○'}
+        label={isMultiSelected ? `テキストを中央寄せ (${selectedNodeIds.length}個)` : 'テキストを中央寄せ'}
+        onClick={() => handle(() => applyTextAlign('center'))}
       />
       <MenuItem
-        icon={currentTextAlign === 'right' ? '◉' : '○'}
-        label="テキストを右寄せ"
-        onClick={() => handle(() => store.updateNodeTextAlign(nodeId, 'right'))}
+        icon={hasUniformTextAlign('right') ? '◉' : '○'}
+        label={isMultiSelected ? `テキストを右寄せ (${selectedNodeIds.length}個)` : 'テキストを右寄せ'}
+        onClick={() => handle(() => applyTextAlign('right'))}
       />
 
       {/* 画像操作 */}

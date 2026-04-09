@@ -46,6 +46,7 @@ export const MindMapCanvas: React.FC = () => {
     selectedNodeIds,
     setSelectedNodeIds,
     updateSelectedNodesColor,
+    updateSelectedNodesTextAlign,
     reparentMultipleNodes,
   } = useMindMapStore();
 
@@ -70,6 +71,16 @@ export const MindMapCanvas: React.FC = () => {
 
   // 複数選択時のカラーピッカー表示
   const [showMultiColorPicker, setShowMultiColorPicker] = useState(false);
+
+  const getMultiAlignButtonClass = (textAlign: 'left' | 'center' | 'right') => {
+    const allSelectedMatch = selectedNodeIds.length > 0 && selectedNodeIds.every(id => {
+      const node = nodes.find(n => n.id === id);
+      return ((node?.data as { textAlign?: 'left' | 'center' | 'right' })?.textAlign ?? 'center') === textAlign;
+    });
+    return allSelectedMatch
+      ? 'bg-slate-900 text-white'
+      : 'text-slate-700 hover:bg-slate-100';
+  };
 
   // Space キー保持中はパンモード
   const [isPanMode, setIsPanMode] = useState(false);
@@ -317,6 +328,27 @@ export const MindMapCanvas: React.FC = () => {
       {selectedNodeIds.length > 1 && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-white rounded-xl shadow-xl border border-slate-200 px-4 py-2">
           <span className="text-xs text-slate-500 font-medium">{selectedNodeIds.length}個のノードを選択中</span>
+          <div className="w-px h-5 bg-slate-200" />
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => updateSelectedNodesTextAlign('left')}
+              className={`px-2.5 py-1.5 rounded-lg text-sm transition-colors ${getMultiAlignButtonClass('left')}`}
+            >
+              左
+            </button>
+            <button
+              onClick={() => updateSelectedNodesTextAlign('center')}
+              className={`px-2.5 py-1.5 rounded-lg text-sm transition-colors ${getMultiAlignButtonClass('center')}`}
+            >
+              中央
+            </button>
+            <button
+              onClick={() => updateSelectedNodesTextAlign('right')}
+              className={`px-2.5 py-1.5 rounded-lg text-sm transition-colors ${getMultiAlignButtonClass('right')}`}
+            >
+              右
+            </button>
+          </div>
           <div className="w-px h-5 bg-slate-200" />
           <div className="relative">
             <button

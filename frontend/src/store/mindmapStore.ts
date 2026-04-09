@@ -99,6 +99,7 @@ interface MindMapStore {
   setSelectedNodeId: (id: string | null) => void;
   setSelectedNodeIds: (ids: string[]) => void;
   updateSelectedNodesColor: (color: string) => void;
+  updateSelectedNodesTextAlign: (textAlign: 'left' | 'center' | 'right') => void;
   setContextMenu: (menu: { x: number; y: number; nodeId: string } | null) => void;
   setDropTargetId: (id: string | null) => void;
   setMouseFlowPosition: (pos: { x: number; y: number } | null) => void;
@@ -216,6 +217,19 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
     set(state => ({
       nodes: state.nodes.map(n =>
         selectedNodeIds.includes(n.id) ? { ...n, data: { ...n.data, color } } : n
+      ),
+      isDirty: true,
+    }));
+    get()._syncTree();
+  },
+
+  updateSelectedNodesTextAlign: (textAlign: 'left' | 'center' | 'right') => {
+    const { selectedNodeIds } = get();
+    if (selectedNodeIds.length === 0) return;
+    get().pushHistory();
+    set(state => ({
+      nodes: state.nodes.map(n =>
+        selectedNodeIds.includes(n.id) ? { ...n, data: { ...n.data, textAlign } } : n
       ),
       isDirty: true,
     }));
