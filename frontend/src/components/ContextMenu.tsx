@@ -16,6 +16,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, nodeId, onClose 
   const [showColorPicker, setShowColorPicker] = useState(false);
   const selectedNode = store.nodes.find(n => n.id === nodeId);
   const currentColor = (selectedNode?.data as { color: string })?.color ?? '#94A3B8';
+  const currentTextAlign = (selectedNode?.data as { textAlign?: 'left' | 'center' | 'right' })?.textAlign ?? 'center';
   const isRoot = (selectedNode?.data as { isRoot?: boolean })?.isRoot;
 
   useEffect(() => {
@@ -122,6 +123,24 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, nodeId, onClose 
           </div>
         )}
       </div>
+
+      {/* 画像操作 */}
+      <div className="h-px bg-slate-100 my-1" />
+      <MenuItem
+        icon={currentTextAlign === 'left' ? '◉' : '○'}
+        label="テキストを左寄せ"
+        onClick={() => handle(() => store.updateNodeTextAlign(nodeId, 'left'))}
+      />
+      <MenuItem
+        icon={currentTextAlign === 'center' ? '◉' : '○'}
+        label="テキストを中央寄せ"
+        onClick={() => handle(() => store.updateNodeTextAlign(nodeId, 'center'))}
+      />
+      <MenuItem
+        icon={currentTextAlign === 'right' ? '◉' : '○'}
+        label="テキストを右寄せ"
+        onClick={() => handle(() => store.updateNodeTextAlign(nodeId, 'right'))}
+      />
 
       {/* 画像操作 */}
       <MenuItem icon="🖼" label="画像を追加..." onClick={handleAddImage} />

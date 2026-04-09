@@ -17,6 +17,7 @@ export function treeToFlow(root: MindMapNode): { nodes: RFNode[]; edges: RFEdge[
       position: { x: node.x, y: node.y },
       data: {
         label: node.label,
+        textAlign: node.textAlign ?? 'center',
         color: node.color,
         image: node.image,
         collapsed: node.collapsed ?? false,
@@ -85,6 +86,7 @@ export function flowToTree(
         x: rfNode.position.x,
         y: rfNode.position.y,
         label: (rfNode.data as { label: string }).label,
+        textAlign: (rfNode.data as { textAlign?: 'left' | 'center' | 'right' }).textAlign ?? 'center',
         color: (rfNode.data as { color: string }).color,
         image: (rfNode.data as { image?: string }).image,
         collapsed: (rfNode.data as { collapsed?: boolean }).collapsed ?? false,
@@ -114,6 +116,7 @@ export function flowToTree(
         x: rf.position.x,
         y: rf.position.y,
         label: (rf.data as { label: string }).label ?? node.label,
+        textAlign: (rf.data as { textAlign?: 'left' | 'center' | 'right' }).textAlign ?? node.textAlign ?? 'center',
         color: (rf.data as { color: string }).color ?? node.color,
         image: (rf.data as { image?: string }).image ?? node.image,
         collapsed: (rf.data as { collapsed?: boolean }).collapsed ?? node.collapsed,

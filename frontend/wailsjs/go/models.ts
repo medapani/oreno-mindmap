@@ -40,6 +40,7 @@ export namespace mindmap {
 	export class Node {
 	    id: string;
 	    label: string;
+	    textAlign?: string;
 	    color: string;
 	    image?: string;
 	    children?: Node[];
@@ -57,6 +58,7 @@ export namespace mindmap {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.label = source["label"];
+	        this.textAlign = source["textAlign"];
 	        this.color = source["color"];
 	        this.image = source["image"];
 	        this.children = this.convertValues(source["children"], Node);

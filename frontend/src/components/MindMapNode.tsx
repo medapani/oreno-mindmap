@@ -5,6 +5,7 @@ import { useMindMapStore } from '../store/mindmapStore';
 
 interface MindMapNodeData {
   label: string;
+  textAlign?: 'left' | 'center' | 'right';
   color: string;
   image?: string;
   collapsed?: boolean;
@@ -49,10 +50,6 @@ const MindMapNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
     setTimeout(() => {
       if (labelRef.current) {
         labelRef.current.focus();
-        const range = document.createRange();
-        range.selectNodeContents(labelRef.current);
-        window.getSelection()?.removeAllRanges();
-        window.getSelection()?.addRange(range);
       }
     }, 0);
   }, []);
@@ -107,13 +104,18 @@ const MindMapNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
           : 'shadow-md hover:shadow-lg';
 
   const isLeft = nodeData.direction === 'left';
+  const textAlignClass = nodeData.textAlign === 'left'
+    ? 'text-left'
+    : nodeData.textAlign === 'right'
+      ? 'text-right'
+      : 'text-center';
 
   // ハンドルのスタイル
   const handleClass = '!w-2 !h-2 !bg-white !border-2 !border-slate-400';
 
   return (
     <div
-      className={`relative rounded-xl transition-all duration-150 select-none ${shadowClass}`}
+      className={`relative rounded-xl transition-all duration-150 ${isEditing ? 'select-text' : 'select-none'} ${shadowClass}`}
       style={{
         backgroundColor: nodeData.color,
         border: `2px solid ${borderColor}`,
@@ -181,9 +183,13 @@ const MindMapNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
           onKeyDown={handleKeyDown}
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}
-          className={`text-sm font-semibold text-white text-center leading-tight break-words whitespace-pre-wrap outline-none ${isEditing ? 'bg-white bg-opacity-20 rounded px-1' : ''
+          className={`nodrag nowheel text-sm font-semibold ${textAlignClass} leading-tight break-words whitespace-pre-wrap outline-none ${isEditing ? 'text-slate-900 bg-white/85 rounded px-1 caret-slate-900' : 'text-white'
             }`}
-          style={{ minHeight: '1.2em', textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}
+          style={{
+            minHeight: '1.2em',
+            textShadow: isEditing ? 'none' : '0 1px 2px rgba(0,0,0,0.3)',
+            caretColor: isEditing ? '#0f172a' : undefined,
+          }}
         >
           {nodeData.label}
         </div>

@@ -86,6 +86,7 @@ interface MindMapStore {
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   updateNodeLabel: (nodeId: string, label: string) => void;
+  updateNodeTextAlign: (nodeId: string, textAlign: 'left' | 'center' | 'right') => void;
   updateNodeColor: (nodeId: string, color: string) => void;
   updateNodeImage: (nodeId: string, image: string) => void;
   updateNodeSize: (nodeId: string, width: number) => void;
@@ -402,6 +403,17 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
     get()._syncTree();
   },
 
+  updateNodeTextAlign: (nodeId: string, textAlign: 'left' | 'center' | 'right') => {
+    get().pushHistory();
+    set(state => ({
+      nodes: state.nodes.map(n =>
+        n.id === nodeId ? { ...n, data: { ...n.data, textAlign } } : n
+      ),
+      isDirty: true,
+    }));
+    get()._syncTree();
+  },
+
   updateNodeColor: (nodeId: string, color: string) => {
     get().pushHistory();
     set(state => ({
@@ -473,6 +485,7 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
     const newTreeNode: MindMapNode = {
       id: newId,
       label: '新しいノード',
+      textAlign: 'center',
       color: '#94A3B8',
       x: 0,
       y: 0,
@@ -1021,6 +1034,7 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
     const newRoot: MindMapNode = {
       id: newId,
       label: '新しいルート',
+      textAlign: 'center',
       color: '#60A5FA',
       x: posX,
       y: posY,
@@ -1153,7 +1167,7 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
     const newSheet: Sheet = {
       id: newId,
       name: `Sheet ${newSheetNum}`,
-      roots: [{ id: newRootId, label: 'テーマ', color: '#60A5FA', x: 0, y: 0 }],
+      roots: [{ id: newRootId, label: 'テーマ', textAlign: 'center', color: '#60A5FA', x: 0, y: 0 }],
     };
     const newSheets = [...updatedSheets, newSheet];
     const { nodes: newNodes, edges: newEdges } = mergeTreesToFlow(newSheet.roots);

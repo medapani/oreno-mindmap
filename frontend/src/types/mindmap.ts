@@ -3,6 +3,7 @@
 export interface MindMapNode {
   id: string;
   label: string;
+  textAlign?: 'left' | 'center' | 'right';
   color: string;
   image?: string; // Base64エンコード画像
   children?: MindMapNode[];
@@ -39,6 +40,7 @@ export interface FlowNode {
   position: { x: number; y: number };
   data: {
     label: string;
+    textAlign?: 'left' | 'center' | 'right';
     color: string;
     image?: string;
     collapsed?: boolean;

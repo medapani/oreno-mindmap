@@ -4,6 +4,7 @@ package mindmap
 type Node struct {
 	ID        string  `yaml:"id" json:"id"`
 	Label     string  `yaml:"label" json:"label"`
+	TextAlign string  `yaml:"textAlign,omitempty" json:"textAlign,omitempty"`
 	Color     string  `yaml:"color" json:"color"`
 	ImageB64  string  `yaml:"image,omitempty" json:"image,omitempty"`
 	Children  []*Node `yaml:"children,omitempty" json:"children,omitempty"`
