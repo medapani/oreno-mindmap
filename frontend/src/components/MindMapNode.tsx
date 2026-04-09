@@ -43,6 +43,17 @@ const MindMapNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
   const isSearchMatch = searchMatchIds.includes(id);
   const isCurrentSearchMatch = searchMatchIds[searchCurrentIndex] === id;
 
+  const selectLabelText = useCallback(() => {
+    const el = labelRef.current;
+    if (!el) return;
+    const selection = window.getSelection();
+    if (!selection) return;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }, []);
+
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     isEditingRef.current = true;
@@ -50,9 +61,10 @@ const MindMapNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
     setTimeout(() => {
       if (labelRef.current) {
         labelRef.current.focus();
+        selectLabelText();
       }
     }, 0);
-  }, []);
+  }, [selectLabelText]);
 
   const handleBlur = useCallback(() => {
     isEditingRef.current = false;
