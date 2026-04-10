@@ -32,6 +32,10 @@ export const wailsClient = {
     return go().ExportMarkdown(mm);
   },
 
+  exportSvg: async (svgContent: string): Promise<void> => {
+    return go().ExportSVG(svgContent);
+  },
+
   getCurrentFilePath: async (): Promise<string> => {
     return go().GetCurrentFilePath();
   },

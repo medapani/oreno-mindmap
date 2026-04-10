@@ -125,6 +125,24 @@ func (a *App) SaveAsFile(mm *mindmap.MindMap) (string, error) {
 	return path, nil
 }
 
+// ExportSVG はSVG文字列をファイルに保存する
+func (a *App) ExportSVG(svgContent string) error {
+	path, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+		Title:           "SVGエクスポート",
+		DefaultFilename: fmt.Sprintf("mindmap-%s.svg", time.Now().Format("20060102")),
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "SVG (*.svg)", Pattern: "*.svg"},
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if path == "" {
+		return nil // キャンセル
+	}
+	return os.WriteFile(path, []byte(svgContent), 0600)
+}
+
 // ExportMarkdown はMarkdown形式でファイルにエクスポートする
 func (a *App) ExportMarkdown(mm *mindmap.MindMap) error {
 	path, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{

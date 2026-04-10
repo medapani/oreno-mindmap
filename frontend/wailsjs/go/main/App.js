@@ -6,6 +6,10 @@ export function ExportMarkdown(arg1) {
   return window['go']['main']['App']['ExportMarkdown'](arg1);
 }
 
+export function ExportSVG(arg1) {
+  return window['go']['main']['App']['ExportSVG'](arg1);
+}
+
 export function GetClipboardImage() {
   return window['go']['main']['App']['GetClipboardImage']();
 }

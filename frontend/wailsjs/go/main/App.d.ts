@@ -5,6 +5,8 @@ import {main} from '../models';
 
 export function ExportMarkdown(arg1:mindmap.MindMap):Promise<void>;
 
+export function ExportSVG(arg1:string):Promise<void>;
+
 export function GetClipboardImage():Promise<string>;
 
 export function GetCurrentFilePath():Promise<string>;

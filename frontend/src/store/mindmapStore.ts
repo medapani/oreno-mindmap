@@ -118,6 +118,7 @@ interface MindMapStore {
   openFile: () => Promise<void>;
   openFileByPath: (path: string) => Promise<void>;
   exportMarkdown: () => Promise<void>;
+  exportSvg: () => Promise<void>;
   importSheets: () => Promise<void>;
   autoLayout: () => void;
   toMindMap: () => MindMap | null;
@@ -151,6 +152,87 @@ function buildNodeSizes(nodes: RFNode[]): { heights: Map<string, number>; widths
     if (measured?.width) widths.set(n.id, measured.width);
   }
   return { heights, widths };
+}
+
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function generateSvgFromFlow(nodes: RFNode[], edges: RFEdge[]): string {
+  if (nodes.length === 0) return '<svg xmlns="http://www.w3.org/2000/svg"></svg>';
+
+  type Box = { x: number; y: number; w: number; h: number };
+  const boxes = new Map<string, Box>();
+  const padding = 48;
+
+  for (const n of nodes) {
+    const measured = (n as RFNode & { measured?: { width?: number; height?: number } }).measured;
+    const styleW = typeof n.style?.width === 'number' ? n.style.width : undefined;
+    const w = measured?.width ?? styleW ?? 160;
+    const h = measured?.height ?? 40;
+    boxes.set(n.id, { x: n.position.x, y: n.position.y, w, h });
+  }
+
+  const allBoxes = [...boxes.values()];
+  const minX = Math.min(...allBoxes.map(b => b.x));
+  const minY = Math.min(...allBoxes.map(b => b.y));
+  const maxX = Math.max(...allBoxes.map(b => b.x + b.w));
+  const maxY = Math.max(...allBoxes.map(b => b.y + b.h));
+  const svgW = maxX - minX + padding * 2;
+  const svgH = maxY - minY + padding * 2;
+  const vx = minX - padding;
+  const vy = minY - padding;
+
+  const edgePaths = edges.map(e => {
+    const src = boxes.get(e.source);
+    const tgt = boxes.get(e.target);
+    if (!src || !tgt) return '';
+    const sh = (e as RFEdge & { sourceHandle?: string }).sourceHandle ?? 'source-right';
+    const sx = sh === 'source-left' ? src.x : src.x + src.w;
+    const sy = src.y + src.h / 2;
+    const th = (e as RFEdge & { targetHandle?: string }).targetHandle ?? 'target-left';
+    const tx = th === 'target-right' ? tgt.x + tgt.w : tgt.x;
+    const ty = tgt.y + tgt.h / 2;
+    const midX = (sx + tx) / 2;
+    return `<path d="M ${sx} ${sy} L ${midX} ${sy} L ${midX} ${ty} L ${tx} ${ty}" fill="none" stroke="#94a3b8" stroke-width="2"/>`;
+  }).join('\n  ');
+
+  const nodeEls = nodes.map(n => {
+    const box = boxes.get(n.id)!;
+    const data = n.data as { label?: string; color?: string; image?: string };
+    const label = data.label ?? '';
+    const color = data.color ?? '#94a3b8';
+    const lines = label.split('\n');
+    const lineH = 18;
+    const textBlockH = lines.length * lineH;
+    const cy = box.y + box.h / 2;
+    const textStartY = cy - (textBlockH / 2) + lineH * 0.75;
+    const tspans = lines.map((line, i) =>
+      `<tspan x="${box.x + box.w / 2}" dy="${i === 0 ? 0 : lineH}">${escapeXml(line)}</tspan>`
+    ).join('');
+
+    const imageEl = data.image
+      ? `<image href="${data.image}" x="${box.x + 4}" y="${box.y + 4}" width="${box.w - 8}" height="${box.h - 8}" preserveAspectRatio="xMidYMid meet" clip-path="url(#clip-${n.id})"/>`
+      : '';
+    const clipEl = data.image
+      ? `<clipPath id="clip-${n.id}"><rect x="${box.x + 4}" y="${box.y + 4}" width="${box.w - 8}" height="${box.h - 8}" rx="4"/></clipPath>`
+      : '';
+    return `${clipEl}<rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" rx="8" fill="${color}" opacity="0.9"/>${imageEl}<text x="${box.x + box.w / 2}" y="${textStartY}" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-size="13" fill="white" font-weight="500">${tspans}</text>`;
+  }).join('\n  ');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="${vx} ${vy} ${svgW} ${svgH}" width="${svgW}" height="${svgH}">
+  <rect x="${vx}" y="${vy}" width="${svgW}" height="${svgH}" fill="#f8fafc"/>
+  <g id="edges">
+  ${edgePaths}
+  </g>
+  <g id="nodes">
+  ${nodeEls}
+  </g>
+</svg>`;
 }
 
 function findNodeInTree(tree: MindMapNode, id: string): MindMapNode | null {
@@ -1033,6 +1115,13 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
     const mm = get().toMindMap();
     if (!mm) return;
     await wailsClient.exportMarkdown(mm);
+  },
+
+  exportSvg: async () => {
+    const { nodes, edges } = get();
+    if (nodes.length === 0) return;
+    const svgContent = generateSvgFromFlow(nodes, edges);
+    await wailsClient.exportSvg(svgContent);
   },
 
   addRootNode: (position?: { x: number; y: number }) => {

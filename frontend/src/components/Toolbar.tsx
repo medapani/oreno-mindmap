@@ -6,7 +6,7 @@ interface ToolbarProps {
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({ onNew }) => {
-  const { isDirty, currentFilePath, saveFile, saveAsFile, openFile, exportMarkdown, importSheets, undo, redo, history, historyIndex, autoLayout, autoSave, toggleAutoSave, searchQuery, searchMatchIds, searchCurrentIndex, setSearchQuery, navigateSearchNext, navigateSearchPrev, clearSearch } = useMindMapStore();
+  const { isDirty, currentFilePath, saveFile, saveAsFile, openFile, exportMarkdown, exportSvg, importSheets, undo, redo, history, historyIndex, autoLayout, autoSave, toggleAutoSave, searchQuery, searchMatchIds, searchCurrentIndex, setSearchQuery, navigateSearchNext, navigateSearchPrev, clearSearch } = useMindMapStore();
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -53,7 +53,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ onNew }) => {
 
       {/* ファイル操作ボタン群 */}
       <div className="flex items-center gap-1 no-drag">
-        <FileMenu onNew={onNew} onOpen={openFile} onSaveAs={saveAsFile} isDirty={isDirty} />
+        <FileMenu onNew={onNew} onOpen={openFile} onSaveAs={saveAsFile} onExportSvg={exportSvg} isDirty={isDirty} />
         <ToolBtn label={isDirty ? '保存*' : '保存'} onClick={saveFile} primary={isDirty} />
         <div className="w-px h-5 bg-slate-200 mx-1" />
         <AutoSaveToggle enabled={autoSave} onToggle={toggleAutoSave} />
@@ -148,10 +148,11 @@ interface FileMenuProps {
   onNew: () => void;
   onOpen: () => void;
   onSaveAs: () => void;
+  onExportSvg: () => void;
   isDirty: boolean;
 }
 
-const FileMenu: React.FC<FileMenuProps> = ({ onNew, onOpen, onSaveAs, isDirty }) => {
+const FileMenu: React.FC<FileMenuProps> = ({ onNew, onOpen, onSaveAs, onExportSvg, isDirty }) => {
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -191,6 +192,8 @@ const FileMenu: React.FC<FileMenuProps> = ({ onNew, onOpen, onSaveAs, isDirty })
             <MenuItem label="開く" onClick={handle(onOpen)} />
             <div className="my-1 border-t border-slate-100" />
             <MenuItem label="名前をつけて保存" onClick={handle(onSaveAs)} />
+            <div className="my-1 border-t border-slate-100" />
+            <MenuItem label="SVGエクスポート" onClick={handle(onExportSvg)} />
           </div>
         )}
       </div>
