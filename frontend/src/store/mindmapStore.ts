@@ -610,6 +610,7 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
     set({
       trees: finalTrees, nodes: newNodes, edges: newEdges, isDirty: true, selectedNodeId: newId,
       pendingLayoutIds: new Set([...prevPending, newId]),
+      editingNodeId: newId,
     });
   },
 
@@ -1145,7 +1146,7 @@ export const useMindMapStore = create<MindMapStore>((set, get) => ({
     };
     const newTrees = [...syncedTrees, newRoot];
     const { nodes: newNodes, edges: newEdges } = mergeTreesToFlow(newTrees);
-    set({ trees: newTrees, nodes: newNodes, edges: newEdges, isDirty: true, selectedNodeId: newId });
+    set({ trees: newTrees, nodes: newNodes, edges: newEdges, isDirty: true, selectedNodeId: newId, editingNodeId: newId });
   },
 
   copyNode: (nodeId: string) => {

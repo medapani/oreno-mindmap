@@ -23,7 +23,7 @@ const MindMapNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
   const isComposingRef = useRef(false);
   const compositionEndTimeRef = useRef(0);
   const isEditingRef = useRef(false); // Reactの再レンダリングに依存しない編集状態
-  const { updateNodeLabel, toggleCollapse, dropTargetId, searchMatchIds, searchCurrentIndex, updateNodeSize } = useMindMapStore();
+  const { updateNodeLabel, toggleCollapse, dropTargetId, searchMatchIds, searchCurrentIndex, updateNodeSize, editingNodeId, setEditingNodeId } = useMindMapStore();
 
   // ESCでプレビューを閉じる
   useEffect(() => {
@@ -54,6 +54,20 @@ const MindMapNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
     selection.removeAllRanges();
     selection.addRange(range);
   }, []);
+
+  // ノード追加直後に自動で編集モードに入る
+  useEffect(() => {
+    if (editingNodeId !== id) return;
+    setEditingNodeId(null);
+    isEditingRef.current = true;
+    setIsEditing(true);
+    setTimeout(() => {
+      if (labelRef.current) {
+        labelRef.current.focus();
+        selectLabelText();
+      }
+    }, 50);
+  }, [editingNodeId, id, setEditingNodeId, selectLabelText]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
