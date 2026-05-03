@@ -21,6 +21,7 @@ const MindMapNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
   const [imagePreview, setImagePreview] = useState(false);
   const labelRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
+  const compositionEndTimeRef = useRef(0);
   const isEditingRef = useRef(false); // Reactの再レンダリングに依存しない編集状態
   const { updateNodeLabel, toggleCollapse, dropTargetId, searchMatchIds, searchCurrentIndex, updateNodeSize } = useMindMapStore();
 
@@ -75,15 +76,21 @@ const MindMapNodeComponent: React.FC<NodeProps> = ({ id, data, selected }) => {
   }, [id, updateNodeLabel]);
 
   const handleCompositionStart = useCallback(() => { isComposingRef.current = true; }, []);
-  const handleCompositionEnd = useCallback(() => { isComposingRef.current = false; }, []);
+  const handleCompositionEnd = useCallback(() => {
+    isComposingRef.current = false;
+    // WKWebViewではcompositionendがkeydownより先に発火するため、確定時刻を記録する
+    compositionEndTimeRef.current = Date.now();
+  }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       if (isEditingRef.current) {
         // 編集中はwindowのグローバルハンドラに伝播させない
-        // (WKWebViewではisComposingが正しく設定されないため、stopPropagationで確実に止める)
         e.stopPropagation();
-        if (!isComposingRef.current) {
+        // WKWebViewではcompositionendがkeydownより先に発火するため、
+        // isComposingRefだけでなく確定直後(50ms以内)のEnterもIME確定として扱う
+        const isImeConfirmation = isComposingRef.current || (Date.now() - compositionEndTimeRef.current < 50);
+        if (!isImeConfirmation) {
           e.preventDefault();
           (e.target as HTMLElement).blur();
         }
